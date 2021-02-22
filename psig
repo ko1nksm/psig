@@ -1,0 +1,198 @@
+#!/bin/sh
+
+set -eu
+
+LF="
+"
+
+usage() {
+  echo "Usage: ${0##*/} [options]... [<pid> | 0 | -]..."
+  echo ""
+  echo "  0: current proccess id"
+  echo "  -: parent proccess id"
+  echo "  no arguments: same as '${0##*/} -'"
+  echo ""
+  echo "Options:"
+  echo "  -g, --pgroup      Specify as a process group id"
+  echo "  -c, --capability  Include capability"
+  echo "  -h, --help        Display help"
+}
+
+abort() {
+  echo "Error:" "$@" >&2
+  exit 1
+}
+
+hex2bin() {
+  eval "$1="
+  while [ "$2" ]; do
+    set -- "$1" "${2#?}" "${2%"${2#?}"}"
+    eval "$1=\${$1}\\\${$((0x$3 + 2))}"
+  done
+  set -- "$1" 0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111
+  eval "eval $1=\${$1}"
+}
+
+signames() {
+  i=0 signals='' bits=$2
+  while [ "$bits" ] && i=$((i+1)); do
+    case $bits in (*1)
+      signame=$(kill -l "$i" 2>/dev/null)
+      [ "$i" = "$signame" ] && signame=''
+      signals="$signals $i:${signame:-<unk>}"
+    esac
+    bits=${bits%?}
+  done
+  [ "$signals" ] || return 0
+  echo "${1}:${signals}"
+}
+
+statinfo() {
+  stat=''
+  while IFS= read -r line; do
+    stat="${stat}${line}${LF}"
+  done
+  stat="${stat}${line}"
+  set -- ""
+  eval "set -- ${stat##*) }"
+  Pgid=$3
+}
+
+statusinfo() {
+  # shellcheck disable=SC2034
+  while read -r key value; do
+    case ${key%:} in (Name | State | Pid | PPid | SigQ)
+      eval "${key%:}=\$value"
+    esac
+  done
+}
+
+cmdline() {
+  echo "Command: $(tr '\0' ' ')"
+}
+
+siginfo() {
+  while read -r signal mask; do
+    case $signal in (Sig???: | Shd???:)
+      hex2bin bits "$mask"
+      signames "${signal%:}" "$bits"
+    esac
+  done
+}
+
+capinfo() {
+  while read -r cap mask; do
+    case $cap in (Cap???:)
+      hex2bin bits "$mask"
+      capnames "${cap%:}" "$bits"
+    esac
+  done
+}
+
+capnames() {
+  i=0 caps='' bits=$2
+  while [ "$bits" ]; do
+    case $bits in (*1)
+      caps="$caps $i:$(capname "$i")"
+    esac
+    bits=${bits%?} i=$((i+1))
+  done
+  [ "$caps" ] || return 0
+  echo "${1}:${caps}"
+}
+
+capname() {
+  case $1 in
+     0) echo CAP_CHOWN ;;
+     1) echo CAP_DAC_OVERRIDE ;;
+     2) echo CAP_DAC_READ_SEARCH ;;
+     3) echo CAP_FOWNER ;;
+     4) echo CAP_FSETID ;;
+     5) echo CAP_KILL ;;
+     6) echo CAP_SETGID ;;
+     7) echo CAP_SETUID ;;
+     8) echo CAP_SETPCAP ;;
+     9) echo CAP_LINUX_IMMUTABLE ;;
+    10) echo CAP_NET_BIND_SERVICE ;;
+    11) echo CAP_NET_BROADCAST ;;
+    12) echo CAP_NET_ADMIN ;;
+    13) echo CAP_NET_RAW ;;
+    14) echo CAP_IPC_LOCK ;;
+    15) echo CAP_IPC_OWNER ;;
+    16) echo CAP_SYS_MODULE ;;
+    17) echo CAP_SYS_RAWIO ;;
+    18) echo CAP_SYS_CHROOT ;;
+    19) echo CAP_SYS_PTRACE ;;
+    20) echo CAP_SYS_PACCT ;;
+    21) echo CAP_SYS_ADMIN ;;
+    22) echo CAP_SYS_BOOT ;;
+    23) echo CAP_SYS_NICE ;;
+    24) echo CAP_SYS_RESOURCE ;;
+    25) echo CAP_SYS_TIME ;;
+    26) echo CAP_SYS_TTY_CONFIG ;;
+    27) echo CAP_MKNOD ;;
+    28) echo CAP_LEASE ;;
+    29) echo CAP_AUDIT_WRITE ;;
+    30) echo CAP_AUDIT_CONTROL ;;
+    31) echo CAP_SETFCAP ;;
+    32) echo CAP_MAC_OVERRIDE ;;
+    33) echo CAP_MAC_ADMIN ;;
+    34) echo CAP_SYSLOG ;;
+    35) echo CAP_WAKE_ALARM ;;
+    36) echo CAP_BLOCK_SUSPEND ;;
+    37) echo CAP_AUDIT_READ ;;
+    38) echo CAP_PERFMON ;;
+    39) echo CAP_BPF ;;
+    40) echo CAP_CHECKPOINT_RESTORE ;;
+  esac
+}
+
+capability='' pgroup=''
+for p; do
+  case $p in
+    -h | --help) usage; exit 0 ;;
+    -g | --pgroup) pgroup=1 ;;
+    -c | --capability) capability=1 ;;
+    -) set -- "$@" "$PPID" ;;
+    -*) abort "Unknown option: $p" ;;
+    0) set -- "$@" "$$" ;;
+    *[!0-9]*) abort "Invalid PID: $p" ;;
+    *) set -- "$@" "$p" ;;
+  esac
+  shift
+done
+[ $# -eq 0 ] && set -- "$PPID"
+
+find_pids_by_pgid() {
+  Pgid=''
+  [ -e "/proc/$1/stat" ] || return 0
+  statinfo < "/proc/$1/stat"
+  pids='' pgid=$Pgid
+  for proc in /proc/[0-9]*; do
+    statinfo < "$proc/stat"
+    [ "$pgid" = "$Pgid" ] || continue
+    pids="$pids${pids:+ }${proc##*/}"
+  done
+  echo "$pids"
+}
+
+if [ "$pgroup" ]; then
+  for pgid; do
+    eval "set -- \"\$@\" $(find_pids_by_pgid "$pgid")"
+    shift
+  done
+fi
+
+for pid; do
+  [ -e "/proc/$pid" ] || continue
+  Name='' State='' PPid='' Pid='' Pgid='' SigQ=''
+  statinfo < "/proc/$pid/stat"
+  statusinfo < "/proc/$pid/status"
+  echo "Name:$Name State:$State PPID:$PPid PID:$Pid PGID:$Pgid SigQ:$SigQ"
+  cmdline < "/proc/$pid/cmdline"
+  siginfo < "/proc/$pid/status"
+  if [ "$capability" ]; then
+    capinfo < "/proc/$pid/status"
+  fi
+  echo
+done
