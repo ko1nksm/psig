@@ -55,13 +55,13 @@ statinfo() {
   stat="${stat}${line}"
   set -- ""
   eval "set -- ${stat##*) }"
-  Pgid=$3
+  State=$1 Pgid=$3
 }
 
 statusinfo() {
   # shellcheck disable=SC2034
   while read -r key value; do
-    case ${key%:} in (Name | State | Pid | PPid | SigQ)
+    case ${key%:} in (Name | Pid | PPid | SigQ)
       eval "${key%:}=\$value"
     esac
   done
