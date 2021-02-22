@@ -55,7 +55,7 @@ statinfo() {
   stat="${stat}${line}"
   set -- ""
   eval "set -- ${stat##*) }"
-  State=$1 Pgid=$3
+  State=$1 Pgid=$3 Sid=$4
 }
 
 statusinfo() {
@@ -185,10 +185,10 @@ fi
 
 for pid; do
   [ -e "/proc/$pid" ] || continue
-  Name='' State='' PPid='' Pid='' Pgid='' SigQ=''
+  Name='' State='' PPid='' Pid='' Pgid='' Sid='' SigQ=''
   statinfo < "/proc/$pid/stat"
   statusinfo < "/proc/$pid/status"
-  echo "Name:$Name State:$State PPID:$PPid PID:$Pid PGID:$Pgid SigQ:$SigQ"
+  echo "Name:$Name State:$State PPID:$PPid PID:$Pid PGID:$Pgid SID:$Sid SigQ:$SigQ"
   cmdline < "/proc/$pid/cmdline"
   siginfo < "/proc/$pid/status"
   if [ "$capability" ]; then
