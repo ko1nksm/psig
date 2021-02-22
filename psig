@@ -14,6 +14,7 @@ usage() {
   echo ""
   echo "Options:"
   echo "  -g, --pgroup      Specify as a process group id"
+  echo "  -s, --session     Specify as a session id"
   echo "  -c, --capability  Include capability"
   echo "  -h, --help        Display help"
 }
@@ -147,11 +148,12 @@ capname() {
   esac
 }
 
-capability='' pgroup=''
+capability='' query='pid'
 for p; do
   case $p in
     -h | --help) usage; exit 0 ;;
-    -g | --pgroup) pgroup=1 ;;
+    -g | --pgroup) query='pgid' ;;
+    -s | --session) query='sid' ;;
     -c | --capability) capability=1 ;;
     -) set -- "$@" "$PPID" ;;
     -*) abort "Unknown option: $p" ;;
@@ -163,9 +165,13 @@ for p; do
 done
 [ $# -eq 0 ] && set -- "$PPID"
 
+find_pids_by_pid() {
+  echo "$1"
+}
+
 find_pids_by_pgid() {
-  Pgid=''
   [ -e "/proc/$1/stat" ] || return 0
+  Pgid=''
   statinfo < "/proc/$1/stat"
   pids='' pgid=$Pgid
   for proc in /proc/[0-9]*; do
@@ -176,12 +182,23 @@ find_pids_by_pgid() {
   echo "$pids"
 }
 
-if [ "$pgroup" ]; then
-  for pgid; do
-    eval "set -- \"\$@\" $(find_pids_by_pgid "$pgid")"
-    shift
+find_pids_by_sid() {
+  [ -e "/proc/$1/stat" ] || return 0
+  Sid=''
+  statinfo < "/proc/$1/stat"
+  pids='' sid=$Sid
+  for proc in /proc/[0-9]*; do
+    statinfo < "$proc/stat"
+    [ "$sid" = "$Sid" ] || continue
+    pids="$pids${pids:+ }${proc##*/}"
   done
-fi
+  echo "$pids"
+}
+
+for id; do
+  eval "set -- \"\$@\" $("find_pids_by_$query" "$id")"
+  shift
+done
 
 for pid; do
   [ -e "/proc/$pid" ] || continue
