@@ -55,7 +55,7 @@ statinfo() {
   done
   stat="${stat}${line}"
   set -- ""
-  eval "set -- ${stat##*) }"
+  eval "set -- ${stat##*\) }"
   State=$1 Pgid=$3 Sid=$4
 }
 
