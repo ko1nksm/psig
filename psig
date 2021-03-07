@@ -7,6 +7,7 @@ LF="
 
 usage() {
   echo "Usage: ${0##*/} [options]... [<pid> | 0 | -]..."
+  echo "Usage: ${0##*/} -d"
   echo ""
   echo "  0: current proccess id"
   echo "  -: parent proccess id"
@@ -16,6 +17,7 @@ usage() {
   echo "  -g, --pgroup      Specify as a process group id"
   echo "  -s, --session     Specify as a session id"
   echo "  -c, --capability  Include capability"
+  echo "  -d, --decode      Decodes the status file read from stdin"
   echo "  -h, --help        Display help"
 }
 
@@ -32,6 +34,11 @@ hex2bin() {
   done
   set -- "$1" 0000 0001 0010 0011 0100 0101 0110 0111 1000 1001 1010 1011 1100 1101 1110 1111
   eval "eval $1=\${$1}"
+}
+
+ismask() {
+  case $1 in (*[!0-9a-fA-F]*) return 1; esac
+  [ ${#1} -eq 16 ]
 }
 
 signames() {
@@ -75,8 +82,12 @@ cmdline() {
 siginfo() {
   while read -r signal mask; do
     case $signal in (Sig???: | Shd???:)
-      hex2bin bits "$mask"
-      signames "${signal%:}" "$bits"
+      if ismask "$mask"; then
+        hex2bin bits "$mask"
+        signames "${signal%:}" "$bits"
+      else
+        echo "$signal invalid mask"
+      fi
     esac
   done
 }
@@ -84,8 +95,12 @@ siginfo() {
 capinfo() {
   while read -r cap mask; do
     case $cap in (Cap???:)
-      hex2bin bits "$mask"
-      capnames "${cap%:}" "$bits"
+      if ismask "$mask"; then
+        hex2bin bits "$mask"
+        capnames "${cap%:}" "$bits"
+      else
+        echo "$signal invalid mask"
+      fi
     esac
   done
 }
@@ -148,13 +163,14 @@ capname() {
   esac
 }
 
-capability='' query='pid'
+capability='' query='pid' decode=''
 for p; do
   case $p in
     -h | --help) usage; exit 0 ;;
     -g | --pgroup) query='pgid' ;;
     -s | --session) query='sid' ;;
     -c | --capability) capability=1 ;;
+    -d | --decode) decode=1 ;;
     -) set -- "$@" "$PPID" ;;
     -*) abort "Unknown option: $p" ;;
     0) set -- "$@" "$$" ;;
@@ -194,6 +210,15 @@ find_pids_by_sid() {
   done
   echo "$pids"
 }
+
+if [ "$decode" ]; then
+  file=$(cat)
+  printf '%s\n' "$file" | while IFS='' read -r line; do
+    printf '%s\n' "$line" | siginfo
+    printf '%s\n' "$line" | capinfo
+  done
+  exit 0
+fi
 
 for id; do
   eval "set -- \"\$@\" $("find_pids_by_$query" "$id")"
