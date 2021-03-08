@@ -212,10 +212,17 @@ find_pids_by_sid() {
 }
 
 if [ "$decode" ]; then
-  file=$(cat)
-  printf '%s\n' "$file" | while IFS='' read -r line; do
-    printf '%s\n' "$line" | siginfo
-    printf '%s\n' "$line" | capinfo
+  if [ -t 0 ]; then
+    echo "Press CTRL-D when you have finished entering the data."
+  fi
+  while
+    file=$(cat)
+    [ "$file" ]
+  do
+    printf '%s\n' "$file" | while IFS='' read -r line; do
+      printf '%s\n' "$line" | siginfo
+      printf '%s\n' "$line" | capinfo
+    done
   done
   exit 0
 fi
