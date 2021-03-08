@@ -14,6 +14,7 @@ Does not work with WSL1.
 
 ```console
 Usage: psig [options]... [<pid> | 0 | -]...
+Usage: psig -d
 
   0: current proccess id
   -: parent proccess id
@@ -21,7 +22,9 @@ Usage: psig [options]... [<pid> | 0 | -]...
 
 Options:
   -g, --pgroup      Specify as a process group id
+  -s, --session     Specify as a session id
   -c, --capability  Include capability
+  -d, --decode      Decodes the status file read from stdin
   -h, --help        Display help
 ```
 
@@ -48,4 +51,14 @@ Name:psig State:R (running) PPID:17481 PID:18494 PGID:18494 SigQ:0/99217
 Command: /bin/sh /home/koichi/bin/psig 17481 0
 SigIgn: 34:RTMIN
 SigCgt: 2:INT 17:CHLD
+```
+
+```console
+$ echo 'SigBlk: 0000000000002000' | psig -d
+SigBlk: 14:ALRM
+
+$ psig -d
+Press CTRL-D when you have finished entering the data.
+SigBlk: 0000000000002000
+SigBlk: 14:ALRM
 ```
