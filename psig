@@ -45,7 +45,7 @@ signames() {
   i=0 signals='' bits=$2
   while [ "$bits" ] && i=$((i+1)); do
     case $bits in (*1)
-      signame=$(kill -l "$i" 2>/dev/null)
+      signame=$(kill -l "$i" 2>/dev/null ||:)
       [ "$i" = "$signame" ] && signame=''
       signals="$signals $i:${signame:-<unk>}"
     esac
